@@ -1,10 +1,10 @@
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, Field
+
 class UserCreate(BaseModel):
-    username: str
-    password: str
-    role: Optional[str] = "user"
+    username: str = Field(..., example="admin1") # type: ignore
+    password: str = Field(..., example="Password@123") # type: ignore
+    role: str = Field(None, example="user") # type: ignore
 
 class UserLogin(BaseModel):
-    username: str
-    password: str
+    username: str = Field(..., example="admin1") # type: ignore
+    password: str = Field(..., example="Password@123") # type: ignore

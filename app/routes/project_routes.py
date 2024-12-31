@@ -7,27 +7,28 @@ from model.user_model import User
 from schemas.project_schema import ProjectCreate,ProjectUpdatePatch
 from jwt_auth.token_validation import JWTBearer
 from fastapi.exceptions import RequestValidationError
-
+from exceptions.project_exception import *
+from schemas.project_schema_response_model import *
 router = APIRouter()
 app = FastAPI()
 
 def get_user_from_token(token_payload: dict):
     user_id = token_payload.get("user_id")
     if not user_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User ID not found in token")
+        raise UserNotFoundException()
     user = User.objects.filter(id=user_id).first()  # type: ignore
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise UserNotFound()
     return user
 
 def check_user_admin_role(user):
     if user.role != 'admin':
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User does not have permission to manage projects")
+        raise UnauthorizedActionException()
 
 def get_project_by_id(id: str):
     project = Project.objects.filter(id=id).first()  # type: ignore
     if not project:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        raise ProjectNotFound()
     return project
 
 def create_new_project(title: str, description: str, created_by: str):
@@ -35,28 +36,30 @@ def create_new_project(title: str, description: str, created_by: str):
     new_project.save()
     return new_project
 
-@router.post('/createproject', tags=['projects'])
+@router.post('/createproject', response_model=SuccessResponse, responses={400: {"model": ErrorResponse}},tags=['projects'])
 def create_projects(project: ProjectCreate, token_payload: dict = Depends(JWTBearer())):
     try:
         user = get_user_from_token(token_payload)
-        check_user_admin_role(user)
-
+        if user.role != 'admin':
+            raise UnauthorizedActionException()
+        existing_project = Project.objects(name=project.title).first()  # type: ignore
+        if existing_project:
+            raise ProjectAlreadyExistsException()
         new_project = create_new_project(project.title, project.description, user.username)
-
-        return JSONResponse(
-            content={"message": "project created successfully",
-                     "project_id": str(new_project.id)}, # type: ignore
-            status_code=201
-            )
-
-    except ValidationError as ve:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Validation error: {str(ve)}")
-    except HTTPException as http_exc:
-        raise http_exc
+        return SuccessResponse(
+            message="Project created successfully",
+            data={"project_id": str(new_project.id)} # type: ignore
+        )
+    except ProjectAlreadyExistsException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+    except UnauthorizedActionException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+    except ValidationException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An unexpected error occurred: {str(e)}")
+        raise InternalServerErrorException(detail=str(e))
 
-@router.put('/updateproject/{id}', tags=['projects'])
+@router.put('/updateproject/{id}', response_model=SuccessResponse, responses={400: {"model": ErrorResponse}},tags=['projects'])
 def update_project_put(id: str,project: ProjectCreate,token_payload: dict = Depends(JWTBearer())):
     try:
         user = get_user_from_token(token_payload)
@@ -67,17 +70,20 @@ def update_project_put(id: str,project: ProjectCreate,token_payload: dict = Depe
         project_to_update.name = project.title
         project_to_update.description = project.description
         project_to_update.save()
-        return JSONResponse(
-            content={"message": "Project updated using PUT successfully",
-                     "project_id": str(project_to_update.id)},
-            status_code=200
-            )
-    except HTTPException as http_exc:
-        raise http_exc
+        return SuccessResponse(
+            message="Project updated using PUT successfully",
+            data={"project_id": str(project_to_update.id)}
+        )
+    except ProjectAlreadyExistsException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+    except UnauthorizedActionException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+    except ValidationException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An error occurred: {str(e)}")
+        raise InternalServerErrorException(detail=str(e))
 
-@router.patch('/updateproject/{id}', tags=['projects'])
+@router.patch('/updateproject/{id}',response_model=SuccessResponse, responses={400: {"model": ErrorResponse}}, tags=['projects'])
 def update_project_patch(id: str,project: ProjectUpdatePatch,token_payload: dict = Depends(JWTBearer())):
     try:
         user = get_user_from_token(token_payload)
@@ -92,19 +98,20 @@ def update_project_patch(id: str,project: ProjectUpdatePatch,token_payload: dict
         
         project_to_update.save()
 
-        return JSONResponse(
-            content={"message": "Project updated using PATCH successfully",
-                     "project_id": str(project_to_update.id)},
-            status_code=200
-            )
-    except ValueError as ve:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(ve)) 
-    except HTTPException as http_exc:
-        raise http_exc
+        return SuccessResponse(
+            message="Project updated using PATCH successfully",
+            data={"project_id": str(project_to_update.id)}
+        )
+    except ProjectAlreadyExistsException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+    except UnauthorizedActionException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+    except ValidationException as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An error occurred: {str(e)}")
+        raise InternalServerErrorException(detail=str(e))
 
-@router.delete('/delete/{id}', tags=['projects'])
+@router.delete('/delete/{id}', response_model=SuccessResponse, responses={400: {"model": ErrorResponse}}, tags=['projects'])
 def delete_project( id: str,token_payload: dict = Depends(JWTBearer())):
     try:
         user = get_user_from_token(token_payload)
@@ -113,39 +120,49 @@ def delete_project( id: str,token_payload: dict = Depends(JWTBearer())):
         project_to_delete = get_project_by_id(id)
 
         project_to_delete.delete()
-        return JSONResponse(
-            content={"message": "Project deleted successfully",
-                     "project_id": str(project_to_delete.id)},
-            status_code=201
-            )
-    except ValueError as ve:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(ve))
-    except HTTPException as http_exc:
-        raise http_exc
+        return SuccessResponse(
+            message="Project deleted successfully",
+            data={"project_id": str(project_to_delete.id)}
+        )
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An error occurred: {str(e)}")
+        raise InternalServerErrorException(detail=str(e))
 
-@router.get('/getprojects' ,response_model=List[str], tags=['projects'])
-def get_projects(token_payload: dict = Depends(JWTBearer())):
+@router.get('/getprojects', response_model=GetProjectsResponse, responses={
+    400: {"model": ErrorResponse},
+    403: {"model": ErrorResponse},
+    404: {"model": ErrorResponse},
+    500: {"model": ErrorResponse}
+}, tags=['projects'])
+def get_projects(token_payload: dict = Depends(JWTBearer())) -> GetProjectsResponse:
     try:
         user = get_user_from_token(token_payload)
-        if user.role == 'user':
-            projects = Project.objects.all()  # type: ignore
-            if not projects:
-                return JSONResponse(
-                content={"message": "No Project Found"},
-                status_code=200
-                )
-            return JSONResponse(
-                content={"message": "Project Details Fetched Successfully",
-                        "projects": [project.to_json() for project in projects]},
-                status_code=200
-                )
-        else:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail=f'Admin does not have permission to view projects')
-    except HTTPException as http_exc:
-        raise http_exc
+        
+        if user.role != 'user':
+            raise ProjectAccessForbiddenException()
+
+        projects = Project.objects.all()  # type: ignore
+        if not projects:
+            raise ProjectNotFound()
+
+        project_list = [
+            {
+                "id": str(project.id),
+                "name": project.name,
+                "description": project.description,
+                "created_by": project.created_by,
+                "created_at": project.created_at
+            }
+            for project in projects
+        ]
+
+        return GetProjectsResponse(
+            message="Project Details Fetched Successfully",
+            projects=project_list  # type: ignore
+        )
+
+    except ProjectAccessForbiddenException:
+        raise HTTPException(status_code=403, detail="Access forbidden: insufficient permissions.")
+    except ProjectNotFound:
+        raise HTTPException(status_code=404, detail="No projects found.")
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An error occurred: {str(e)}")
-
-
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")

@@ -4,7 +4,8 @@ from fastapi.responses import RedirectResponse
 from routes import user_routes,project_routes  # type: ignore
 from db import init_db
 
-app=FastAPI()
+app = FastAPI()
+
 app.include_router(user_routes.router)
 app.include_router(project_routes.router)
 init_db()

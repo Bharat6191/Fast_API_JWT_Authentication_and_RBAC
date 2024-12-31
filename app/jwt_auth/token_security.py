@@ -13,10 +13,7 @@ def sign_jwt(user_id: str):
         "expires":time.time()+600
     }
     token=jwt.encode(payload,JWT_SECRET,algorithm=JWT_ALGORITHM)
-    return JSONResponse(
-        status_code=200,
-        content={'access_token':token}
-    )
+    return str(token)
 
 def decode_jwt(token:str):
     try:
