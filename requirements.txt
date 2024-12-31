@@ -3,3 +3,4 @@ uvicorn
 mongoengine
 PyJWT
 python-dotenv
+passlib
