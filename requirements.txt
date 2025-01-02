@@ -4,3 +4,4 @@ mongoengine
 PyJWT
 python-dotenv
 passlib
+bcrypt
