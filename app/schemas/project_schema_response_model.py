@@ -22,3 +22,6 @@ class ProjectDetailResponse(BaseModel):
 class GetProjectsResponse(BaseModel):
     message: str = Field(..., description="The status message of the API response")
     projects: List[ProjectDetailResponse] = Field(..., description="A list of projects with their details")
+    total_project: int  # Add this field
+    page: int  # Add this field
+    page_size: int  # Add this field

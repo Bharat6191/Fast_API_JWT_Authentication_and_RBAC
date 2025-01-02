@@ -1,5 +1,5 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status,Request,FastAPI
+from fastapi import APIRouter, Depends, HTTPException, Query, status,Request,FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from model.project_model import Project
@@ -133,14 +133,21 @@ def delete_project( id: str,token_payload: dict = Depends(JWTBearer())):
     404: {"model": ErrorResponse},
     500: {"model": ErrorResponse}
 }, tags=['projects'])
-def get_projects(token_payload: dict = Depends(JWTBearer())) -> GetProjectsResponse:
+def get_projects(token_payload: dict = Depends(JWTBearer()),
+                 page:int =Query(1,ge=1,description="page number"),
+                 page_size:int=Query(2,ge=1,le=100,description="Number of items per page (Default is 2)")) -> GetProjectsResponse:
     try:
         user = get_user_from_token(token_payload)
         
         if user.role != 'user':
             raise ProjectAccessForbiddenException()
+        
+        offset=(page-1)*page_size
+        limit=page_size
 
         projects = Project.objects.all()  # type: ignore
+        projects=Project.objects.skip(offset).limit(limit) #type: ignore
+        total_project=Project.objects.count() # type: ignore
         if not projects:
             raise ProjectNotFound()
 
@@ -157,7 +164,10 @@ def get_projects(token_payload: dict = Depends(JWTBearer())) -> GetProjectsRespo
 
         return GetProjectsResponse(
             message="Project Details Fetched Successfully",
-            projects=project_list  # type: ignore
+            projects=project_list,  # type: ignore
+            total_project=total_project,  # Optional: Include total for client reference # type: ignore
+            page=page,# type: ignore
+            page_size=page_size# type: ignore
         )
 
     except ProjectAccessForbiddenException:
